@@ -1,212 +1,188 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <title>EVA RADAR RF - Web Serial Controller</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>EVA RADAR RF - Dashboard MQTT</title>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     :root {
       --bg: #0f172a;
       --card: #1e293b;
-      --accent: #38bdf8;
       --text: #f8fafc;
       --muted: #94a3b8;
+      --accent: #38bdf8;
+      --green: #22c55e;
+      --yellow: #eab308;
+      --red: #ef4444;
+      --shadow: 0 4px 12px rgba(0,0,0,0.3);
     }
-    * { box-sizing: border-box; }
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     
     html, body {
+      width: 100%;
       height: 100vh;
-      margin: 0;
-      padding: 12px 18px;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: var(--bg);
+      height: 100dvh; /* Garante tamanho exato sem barra de navegação do celular */
+      overflow: hidden; /* Força zero rolagem */
+      background: radial-gradient(ellipse at top, #1e293b 0%, var(--bg) 80%);
       color: var(--text);
-      overflow: hidden;
+      font-family: system-ui, -apple-system, sans-serif;
+      padding: 8px;
     }
 
-    .app-wrapper {
+    .container {
+      width: 100%;
+      height: 100%;
+      max-width: 900px;
+      margin: 0 auto;
       display: flex;
       flex-direction: column;
-      height: 100%;
-      max-width: 1400px;
-      margin: 0 auto;
-      gap: 12px;
+      gap: 8px;
     }
 
-    .header {
+    header {
+      background: var(--card);
+      padding: 6px 12px;
+      border-radius: 10px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      background: var(--card);
-      padding: 8px 16px;
-      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.05);
+      flex-shrink: 0;
     }
-    .header h2 { margin: 0; font-size: 1.1rem; color: var(--accent); }
+    h1 { font-size: 0.95rem; color: var(--accent); font-weight: 700; }
     
-    .com-selector {
-      display: flex;
-      align-items: center;
-      gap: 10px;
+    .status-badge {
+      display: flex; align-items: center; gap: 6px; font-size: 0.7rem; color: var(--muted);
+      background: #0f172a; padding: 4px 8px; border-radius: 12px;
     }
-    .com-status {
-      font-size: 0.85rem;
-      color: var(--muted);
-      background: #0f172a;
-      padding: 6px 12px;
-      border-radius: 6px;
-      border: 1px solid #334155;
-    }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: #334155; }
+    .dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); }
 
-    .btn-connect {
-      background: #0284c7;
-      color: #fff;
-      border: none;
-      padding: 6px 14px;
-      font-size: 0.85rem;
-      font-weight: bold;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-    .btn-connect:hover { background: #0369a1; }
-
-    .main-grid {
-      display: grid;
-      grid-template-columns: 280px 1fr;
-      gap: 12px;
+    .grid-main {
       flex: 1;
-      min-height: 0;
-    }
-
-    .sidebar {
       display: flex;
       flex-direction: column;
-      gap: 10px;
-      overflow-y: auto;
+      gap: 8px;
+      min-height: 0; /* Previne overflow do flex */
+    }
+
+    @media (min-width: 768px) {
+      .grid-main { display: grid; grid-template-columns: 300px 1fr; }
     }
 
     .card {
       background: var(--card);
-      border-radius: 8px;
-      padding: 12px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-    }
-    .card h3 { margin: 0 0 8px 0; font-size: 0.9rem; border-bottom: 1px solid #334155; padding-bottom: 4px; }
-
-    .led-container {
-      display: flex;
-      justify-content: space-around;
-      background: #0f172a;
-      padding: 8px;
-      border-radius: 6px;
-      margin-bottom: 8px;
-      text-align: center;
-    }
-    .led {
-      width: 22px;
-      height: 22px;
-      border-radius: 50%;
-      background: #334155;
-      margin: 0 auto 3px auto;
-      transition: all 0.2s;
-    }
-    .led.green.active { background: #22c55e; box-shadow: 0 0 10px #22c55e; }
-    .led.yellow.active { background: #eab308; box-shadow: 0 0 10px #eab308; }
-    .led.red.active { background: #ef4444; box-shadow: 0 0 10px #ef4444; }
-    .led-container small { font-size: 0.65rem; color: var(--muted); }
-
-    .metric {
-      display: flex;
-      justify-content: space-between;
-      border-bottom: 1px solid #283548;
-      padding: 4px 0;
-      font-size: 0.8rem;
-    }
-    .metric val { font-weight: bold; color: var(--accent); }
-
-    .form-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-    }
-    .form-group { margin-bottom: 4px; }
-    .form-group label { display: block; font-size: 0.7rem; color: var(--muted); }
-    .form-group input {
-      width: 100%;
-      padding: 4px 6px;
-      background: #0f172a;
-      border: 1px solid #334155;
-      color: #fff;
-      border-radius: 4px;
-      font-size: 0.8rem;
-    }
-
-    .chart-card {
+      border-radius: 12px;
+      padding: 10px;
+      box-shadow: var(--shadow);
+      border: 1px solid rgba(255,255,255,0.05);
       display: flex;
       flex-direction: column;
-      height: 100%;
+      justify-content: center;
     }
-    .chart-box {
-      flex: 1;
-      position: relative;
-      min-height: 0;
+    .card h2 { font-size: 0.75rem; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    .leds { display: flex; justify-content: space-around; background: #0f172a; padding: 6px; border-radius: 8px; margin-bottom: 6px; }
+    .led-box { text-align: center; font-size: 0.6rem; color: var(--muted); font-weight: bold; }
+    .led { width: 14px; height: 14px; border-radius: 50%; background: #334155; margin: 0 auto 2px; transition: all 0.3s; }
+    .led.green.active { background: var(--green); box-shadow: 0 0 10px var(--green); }
+    .led.yellow.active { background: var(--yellow); box-shadow: 0 0 10px var(--yellow); }
+    .led.red.active { background: var(--red); box-shadow: 0 0 10px var(--red); }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px 12px;
     }
+    .metric { display: flex; justify-content: space-between; padding: 2px 0; font-size: 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.03); }
+    .metric span:last-child { font-weight: 700; color: var(--accent); }
+
+    .controls-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .form-group { margin-bottom: 0; }
+    .form-group.full { grid-column: span 2; }
+    .form-group label { display: block; font-size: 0.65rem; color: var(--muted); margin-bottom: 2px; }
+    .form-group select, .form-group input {
+      width: 100%; padding: 5px 8px; background: #0f172a; border: 1px solid #334155; border-radius: 6px; color: #fff; font-size: 0.75rem;
+    }
+    
+    .btn {
+      grid-column: span 2;
+      width: 100%; background: var(--accent); color: #000; border: none; padding: 8px;
+      border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.75rem; margin-top: 2px;
+    }
+    .btn:active { opacity: 0.8; }
+
+    .chart-card { flex: 1; min-height: 0; justify-content: flex-start; }
+    .chart-box { flex: 1; position: relative; width: 100%; height: 100%; min-height: 0; }
   </style>
 </head>
 <body>
 
-  <div class="app-wrapper">
-    <div class="header">
-      <h2>EVA RADAR RF - Painel de Controle</h2>
-      <div class="com-selector">
-        <span id="comStatus" class="com-status">Porta COM: Não selecionada</span>
-        <button id="btnConnect" class="btn-connect" onclick="conectarSerial()">Selecionar Porta COM</button>
+  <div class="container">
+    <header>
+      <h1>EVA RADAR RF</h1>
+      <div class="status-badge">
+        <div id="dotWeb" class="dot"></div>
+        <span id="txtWeb">Conectando...</span>
       </div>
-    </div>
+    </header>
 
-    <div class="main-grid">
-      <!-- Painel Esquerdo Compacto -->
-      <div class="sidebar">
+    <div class="grid-main">
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <!-- Status Card -->
         <div class="card">
-          <h3>Status & LEDs Físicos</h3>
-          <div class="led-container">
-            <div><div id="ledGreen" class="led green"></div><small>AUSENTE</small></div>
-            <div><div id="ledYellow" class="led yellow"></div><small>SUSPEITA</small></div>
-            <div><div id="ledRed" class="led red"></div><small>PRESENÇA</small></div>
+          <h2>Status do Sistema</h2>
+          <div class="leds">
+            <div class="led-box"><div id="ledVerde" class="led green"></div>AUSENTE</div>
+            <div class="led-box"><div id="ledAmarelo" class="led yellow"></div>SUSPEITA</div>
+            <div class="led-box"><div id="ledVermelho" class="led red"></div>PRESENÇA</div>
           </div>
 
-          <div class="metric"><span>RSSI Filtrado:</span><val id="valRssi">0 dBm</val></div>
-          <div class="metric"><span>Referência:</span><val id="valRef">0 dBm</val></div>
-          <div class="metric"><span>Delta:</span><val id="valDelta">0 dB</val></div>
-          <div class="metric"><span>Estado:</span><val id="valEstado">OFFLINE</val></div>
+          <div class="metrics-grid">
+            <div class="metric"><span>Fonte:</span><span id="valModo">--</span></div>
+            <div class="metric"><span>Estado:</span><span id="valEstado">OFFLINE</span></div>
+            <div class="metric"><span>RSSI:</span><span id="valRssi">0 dBm</span></div>
+            <div class="metric"><span>Delta:</span><span id="valDelta">0 dB</span></div>
+            <div class="metric" style="grid-column: span 2;"><span>Referência:</span><span id="valRef">0 dBm</span></div>
+          </div>
         </div>
 
+        <!-- Ajustes Card -->
         <div class="card">
-          <h3>Parâmetros de Ajuste</h3>
-          <div class="form-grid">
+          <h2>Ajustes Remotos</h2>
+          <div class="controls-grid">
+            <div class="form-group full">
+              <label>Fonte de Sinal RSSI:</label>
+              <select id="cfgFonteSinal">
+                <option value="TX">ESP32 TX (Pacotes UDP)</option>
+                <option value="WIFI">Wi-Fi Local (Roteador)</option>
+              </select>
+            </div>
+
             <div class="form-group">
               <label>Limiar Ent. (dBm):</label>
               <input type="number" step="0.1" id="cfgEntrada" value="3.5">
             </div>
+            
             <div class="form-group">
               <label>Limiar Saída (dBm):</label>
               <input type="number" step="0.1" id="cfgSaida" value="1.8">
             </div>
-            <div class="form-group">
-              <label>Tam. Filtro:</label>
-              <input type="number" id="cfgFiltro" value="6">
-            </div>
-            <div class="form-group">
-              <label>Tempo Conf. (ms):</label>
-              <input type="number" id="cfgTempoPresenca" value="200">
-            </div>
+
+            <button class="btn" onclick="enviarConfiguracao()">Aplicar Configuração</button>
           </div>
         </div>
       </div>
 
-      <!-- Área do Gráfico Adaptável -->
+      <!-- Gráfico Card -->
       <div class="card chart-card">
-        <h3>Sinal RF em Tempo Real</h3>
+        <h2>Sinal RF em Tempo Real</h2>
         <div class="chart-box">
           <canvas id="chartRssi"></canvas>
         </div>
@@ -221,165 +197,80 @@
       data: {
         labels: [],
         datasets: [
-          { label: 'RSSI Filtrado (dBm)', borderColor: '#38bdf8', data: [], tension: 0.2, pointRadius: 2 },
-          { label: 'Referência (dBm)', borderColor: '#eab308', borderDash: [4, 4], data: [], pointRadius: 0 }
+          { label: 'RSSI (dBm)', borderColor: '#38bdf8', data: [], tension: 0.2, pointRadius: 1 },
+          { label: 'Ref (dBm)', borderColor: '#eab308', borderDash: [3, 3], data: [], pointRadius: 0 }
         ]
       },
       options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { labels: { color: '#f8fafc', boxWidth: 12, font: { size: 11 } } }
-        },
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: '#f8fafc', boxWidth: 8, font: { size: 9 } } } },
         scales: {
-          x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#1e293b' } },
-          y: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#334155' } }
+          x: { ticks: { color: '#94a3b8', font: { size: 8 } }, grid: { color: '#1e293b' } },
+          y: { ticks: { color: '#94a3b8', font: { size: 8 } }, grid: { color: '#334155' } }
         }
       }
     });
 
-    let port, writer;
-    let bufferRssi = [];
-    let amostrasCalib = [];
-    let referenciaRssi = -67.0;
-    let estadoAtual = "CALIBRANDO";
-    let inicioSuspeita = 0;
+    const client = mqtt.connect("wss://broker.emqx.io:8084/mqtt", {
+      clientId: "web_radar_" + Math.random().toString(16).substr(2, 8)
+    });
 
-    async function conectarSerial() {
-      if (!("serial" in navigator)) {
-        alert("Navegador incompatível. Use o Google Chrome ou Microsoft Edge.");
-        return;
-      }
+    const topicData = "casa/radar/data";
+    const topicCmd  = "casa/radar/cmd";
 
+    client.on("connect", () => {
+      document.getElementById('dotWeb').className = "dot online";
+      document.getElementById('txtWeb').textContent = "Online";
+      client.subscribe(topicData);
+      client.subscribe(topicCmd);
+    });
+
+    client.on("message", (topic, message) => {
       try {
-        // Solicita ao navegador para abrir o seletor nativo de portas COM do SO
-        port = await navigator.serial.requestPort();
-        await port.open({ baudRate: 115200 });
+        const data = JSON.parse(message.toString());
         
-        writer = port.writable.getWriter();
+        if (topic === topicData) {
+          document.getElementById('valModo').innerText  = data.fonte || "TX";
+          document.getElementById('valRssi').innerText  = data.rssi.toFixed(1);
+          document.getElementById('valRef').innerText   = data.ref.toFixed(1);
+          document.getElementById('valDelta').innerText = data.delta.toFixed(1);
+          document.getElementById('valEstado').innerText= data.estado;
 
-        // Extrai informações da porta (se disponíveis pelo SO/driver)
-        const info = port.getInfo();
-        let nomePorta = "Conectado";
-        if (info.usbVendorId) {
-          nomePorta = `Conectado (USB ID: ${info.usbVendorId.toString(16)})`;
-        }
+          document.getElementById('ledVerde').className = 'led green' + (data.estado === 'AUSENTE' ? ' active' : '');
+          document.getElementById('ledAmarelo').className = 'led yellow' + (data.estado === 'CALIBRANDO' || data.estado === 'SUSPEITA' ? ' active' : '');
+          document.getElementById('ledVermelho').className = 'led red' + (data.estado === 'PRESENCA' ? ' active' : '');
 
-        document.getElementById('comStatus').innerText = nomePorta;
-        document.getElementById('comStatus').style.color = "#22c55e";
-        document.getElementById('comStatus').style.borderColor = "#22c55e";
-
-        document.getElementById('btnConnect').innerText = "Alterar Porta COM";
-        document.getElementById('btnConnect').style.background = "#334155";
-
-        lerDadosSerial();
-      } catch (err) {
-        if (err.name !== 'NotFoundError') {
-          alert("Erro ao abrir a porta Serial: " + err);
-        }
-      }
-    }
-
-    async function enviarComandoLed(comando) {
-      if (writer) {
-        const encoder = new TextEncoder();
-        await writer.write(encoder.encode(comando + "\n"));
-      }
-    }
-
-    async function lerDadosSerial() {
-      const textDecoder = new TextDecoderStream();
-      const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
-      const reader = textDecoder.readable.getReader();
-
-      let bufferTexto = "";
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        bufferTexto += value;
-        let linhas = bufferTexto.split("\n");
-        bufferTexto = linhas.pop();
-
-        for (let linha of linhas) {
-          linha = linha.trim();
-          if (linha.startsWith("RSSI:")) {
-            let rssiBruto = parseInt(linha.split(":")[1]);
-            processarAlgoritmo(rssiBruto);
+          let hora = new Date().toLocaleTimeString();
+          if (chart.data.labels.length > 20) {
+            chart.data.labels.shift();
+            chart.data.datasets[0].data.shift();
+            chart.data.datasets[1].data.shift();
           }
-        }
-      }
-    }
-
-    function processarAlgoritmo(rssi) {
-      let limiarEntrada = parseFloat(document.getElementById('cfgEntrada').value);
-      let limiarSaida = parseFloat(document.getElementById('cfgSaida').value);
-      let tamanhoFiltro = parseInt(document.getElementById('cfgFiltro').value);
-      let tempoConfirmPresenca = parseInt(document.getElementById('cfgTempoPresenca').value);
-
-      bufferRssi.push(rssi);
-      if (bufferRssi.length > tamanhoFiltro) bufferRssi.shift();
-      let rssiFiltrado = bufferRssi.reduce((a, b) => a + b, 0) / bufferRssi.length;
-
-      if (estadoAtual === "CALIBRANDO") {
-        amostrasCalib.push(rssiFiltrado);
-        enviarComandoLed("LED:AMARELO");
-        
-        if (amostrasCalib.length >= 50) {
-          referenciaRssi = amostrasCalib.reduce((a, b) => a + b, 0) / amostrasCalib.length;
-          estadoAtual = "AUSENTE";
-          enviarComandoLed("LED:VERDE");
-        }
-      } else {
-        let delta = Math.abs(rssiFiltrado - referenciaRssi);
-
-        if (estadoAtual === "AUSENTE") {
-          if (delta >= limiarEntrada) {
-            estadoAtual = "SUSPEITA";
-            inicioSuspeita = Date.now();
-            enviarComandoLed("LED:AMARELO");
-          }
+          chart.data.labels.push(hora);
+          chart.data.datasets[0].data.push(data.rssi);
+          chart.data.datasets[1].data.push(data.ref);
+          chart.update('none');
         } 
-        else if (estadoAtual === "SUSPEITA") {
-          if (delta >= limiarEntrada) {
-            if (Date.now() - inicioSuspeita >= tempoConfirmPresenca) {
-              estadoAtual = "PRESENCA";
-              enviarComandoLed("LED:VERMELHO");
-            }
-          } else {
-            estadoAtual = "AUSENTE";
-            enviarComandoLed("LED:VERDE");
-          }
-        } 
-        else if (estadoAtual === "PRESENCA") {
-          if (delta <= limiarSaida) {
-            estadoAtual = "AUSENTE";
-            enviarComandoLed("LED:VERDE");
-          }
+        else if (topic === topicCmd) {
+          if (data.fonte !== undefined) document.getElementById('cfgFonteSinal').value = data.fonte;
+          if (data.limiarEntrada !== undefined) document.getElementById('cfgEntrada').value = data.limiarEntrada;
+          if (data.limiarSaida !== undefined) document.getElementById('cfgSaida').value = data.limiarSaida;
         }
+      } catch (e) { console.error(e); }
+    });
 
-        document.getElementById('valDelta').innerText = delta.toFixed(2) + " dB";
-      }
-
-      document.getElementById('valRssi').innerText = rssiFiltrado.toFixed(2) + " dBm";
-      document.getElementById('valRef').innerText = referenciaRssi.toFixed(2) + " dBm";
-      document.getElementById('valEstado').innerText = estadoAtual;
-
-      document.getElementById('ledGreen').className = 'led green' + (estadoAtual === 'AUSENTE' ? ' active' : '');
-      document.getElementById('ledYellow').className = 'led yellow' + (estadoAtual === 'CALIBRANDO' || estadoAtual === 'SUSPEITA' ? ' active' : '');
-      document.getElementById('ledRed').className = 'led red' + (estadoAtual === 'PRESENCA' ? ' active' : '');
-
-      let agora = new Date().toLocaleTimeString();
-      if (chart.data.labels.length > 30) {
-        chart.data.labels.shift();
-        chart.data.datasets[0].data.shift();
-        chart.data.datasets[1].data.shift();
-      }
-      chart.data.labels.push(agora);
-      chart.data.datasets[0].data.push(rssiFiltrado.toFixed(2));
-      chart.data.datasets[1].data.push(referenciaRssi.toFixed(2));
-      chart.update('none');
+    function enviarConfiguracao() {
+      const fonte = document.getElementById('cfgFonteSinal').value;
+      const ent   = parseFloat(document.getElementById('cfgEntrada').value);
+      const sai   = parseFloat(document.getElementById('cfgSaida').value);
+      
+      const cmd = JSON.stringify({
+        fonte: fonte,
+        limiarEntrada: ent,
+        limiarSaida: sai
+      });
+      
+      client.publish(topicCmd, cmd);
     }
   </script>
 </body>
